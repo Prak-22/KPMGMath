@@ -14,26 +14,26 @@ import openai
 import re
 import base64
 
-# Set page configuration
 st.set_page_config(page_title="PDF to Excel Converter with Calculations", layout="wide")
 
-# Check package versions
+
 pd_version = pd.__version__
 openpyxl_version = openpyxl.__version__
 
-# Create output folder if it doesn't exist
+
 if not os.path.exists("output_folder"):
     os.makedirs("output_folder")
 
-# Sidebar for API key input and system info
+
 with st.sidebar:
     st.title("Configuration")
     api_key = st.text_input("Enter your OpenAI API Key:", type="password")
     if api_key:
-        # Store API key in session state instead of globally configuring openai
+      
+      
         st.session_state['openai_api_key'] = api_key
 
-    # Check if API key is in session state
+    
     if 'openai_api_key' in st.session_state:
         st.success("✅ API Key set")
     else:
@@ -44,11 +44,11 @@ with st.sidebar:
     st.write(f"Pandas version: {pd_version}")
     st.write(f"Openpyxl version: {openpyxl_version}")
 
-    # Check for potential version issues
+    
     if pd_version >= "2.0.0" and openpyxl_version < "3.1.0":
         st.warning("Potential version incompatibility. Consider upgrading openpyxl:\n```\npip install openpyxl --upgrade\n```")
 
-# Main application title
+
 st.title("Financial Statement PDF to Excel Converter")
 st.write("""
 This application extracts tables from financial statement PDFs (like 10-K reports),
@@ -56,12 +56,12 @@ converts them to Excel, adds calculation rows to verify totals, and allows you t
 questions about the financial data. It uses 100% Python libraries with no external dependencies.
 """)
 
-# Placeholder for the uploaded PDF content
+
 pdf_content = None
 extracted_tables = []
 excel_path = None
 
-# Function to handle duplicate column names (replacement for pd.io.parsers.ParserBase._maybe_dedup_names)
+
 def handle_duplicate_columns(columns):
     """
     Creates unique column names by appending a suffix to duplicate column names.
@@ -84,16 +84,16 @@ def handle_duplicate_columns(columns):
 
     return new_columns
 
-# Function to extract tables from PDF
+
 def extract_tables_from_pdf(pdf_file):
     tables = []
 
-    # Save the uploaded file to a temporary file
+    
     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
         temp_file.write(pdf_file.getvalue())
         temp_path = temp_file.name
 
-    # Extract tables using pdfplumber (Python-only solution)
+    
     try:
         with st.spinner("Extracting tables using pdfplumber..."):
             with pdfplumber.open(temp_path) as pdf:
@@ -106,19 +106,19 @@ def extract_tables_from_pdf(pdf_file):
                     extracted = page.extract_tables()
                     if extracted:
                         for table_num, table in enumerate(extracted, 1):
-                            # Convert to pandas DataFrame
-                            if table and len(table) > 1:  # Has at least headers and one row
-                                # Get column names from the first row
+                          
+                            if table and len(table) > 1:  
+                            
                                 columns = [str(col) if col is not None else f"Column_{i}"
                                         for i, col in enumerate(table[0])]
 
-                                # Handle duplicate column names using our custom function
+                                
                                 columns = handle_duplicate_columns(columns)
 
-                                # Create DataFrame from remaining rows
+                            
                                 df = pd.DataFrame(table[1:], columns=columns)
 
-                                # Clean the dataframe
+                                
                                 df = clean_financial_dataframe(df)
 
                                 if not df.empty:
@@ -127,7 +127,7 @@ def extract_tables_from_pdf(pdf_file):
     except Exception as e:
         st.error(f"PDFPlumber extraction error: {str(e)}")
 
-    # If no tables extracted with pdfplumber, try PyPDF
+   
     if not tables:
         try:
             with st.spinner("Trying alternative extraction with PyPDF..."):
@@ -140,36 +140,36 @@ def extract_tables_from_pdf(pdf_file):
                         progress_bar.progress((page_num + 1) / total_pages)
                         st.text(f"Processing page {page_num + 1} of {total_pages} with PyPDF...")
 
-                        # Extract text from page
+                       
                         page = pdf_reader.pages[page_num]
                         text = page.extract_text()
 
-                        # Try to extract table-like structures from text
+                       
                         if text:
-                            # Split by newlines to get rows
+                           
                             rows = text.split('\n')
                             processed_rows = []
 
                             for row in rows:
-                                # Skip empty rows
+                            
                                 if not row.strip():
                                     continue
 
-                                # Try to split row by common delimiters
+                                
                                 cells = re.split(r'\s{2,}', row)
-                                if len(cells) > 1:  # Has multiple columns
+                                if len(cells) > 1:  
                                     processed_rows.append(cells)
 
-                            if len(processed_rows) > 1:  # At least headers and one data row
-                                # First row as headers
+                            if len(processed_rows) > 1:  
+                               
                                 headers = processed_rows[0]
-                                # Make sure headers are unique using our custom function
+                                
                                 headers = handle_duplicate_columns(headers)
 
-                                # Create DataFrame
+                               
                                 df = pd.DataFrame(processed_rows[1:], columns=headers)
 
-                                # Clean the dataframe
+                             
                                 df = clean_financial_dataframe(df)
 
                                 if not df.empty:
@@ -178,7 +178,7 @@ def extract_tables_from_pdf(pdf_file):
         except Exception as e:
             st.error(f"PyPDF extraction error: {str(e)}")
 
-    # Clean up the temporary file
+    
     try:
         os.unlink(temp_path)
     except:
@@ -186,7 +186,7 @@ def extract_tables_from_pdf(pdf_file):
 
     return tables
 
-# Function to clean and prepare financial dataframes
+
 def clean_financial_dataframe(df):
     # Remove completely empty rows and columns
     df = df.dropna(how='all').dropna(axis=1, how='all')
@@ -194,14 +194,14 @@ def clean_financial_dataframe(df):
     if df.empty:
         return df
 
-    # Handle duplicate column names
+   
     df.columns = handle_duplicate_columns(df.columns)
 
-    # If the first row looks like a header (contains 'assets', 'liabilities', etc.), use it as column names
+   
     if len(df) > 0:
         first_row_text = ' '.join(df.iloc[0].astype(str)).lower()
         if any(keyword in first_row_text for keyword in ['assets', 'liabilities', 'equity', 'income', 'revenue', 'expenses']):
-            # Create new column names from the first row, handling potential duplicates
+            
             new_columns = [str(col) if col is not None else f"Column_{i}" for i, col in enumerate(df.iloc[0])]
             new_columns = handle_duplicate_columns(new_columns)
 
@@ -209,10 +209,10 @@ def clean_financial_dataframe(df):
             df = df.iloc[1:]
             df = df.reset_index(drop=True)
 
-    # Convert potential numeric columns to numeric types
+   
     for col in df.columns:
-        if col != df.columns[0]:  # Skip the first column which is usually labels
-            # Try to convert numbers with commas, parentheses and $ signs
+        if col != df.columns[0]:  
+           
             try:
                 # Remove $ and commas
                 df[col] = df[col].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False)
@@ -225,11 +225,12 @@ def clean_financial_dataframe(df):
             except:
                 pass
 
-    # Rename columns if they are unnamed or numeric
+   
     renamed_columns = []
     for i, col in enumerate(df.columns):
         if pd.isna(col) or (isinstance(col, (int, float)) and not isinstance(col, bool)):
-            # If column is a date-looking number (like 20230729), try to format it
+           
+
             if isinstance(col, (int, float)) and len(str(int(col))) == 8:
                 date_str = str(int(col))
                 try:
@@ -244,7 +245,7 @@ def clean_financial_dataframe(df):
         else:
             renamed_columns.append(col)
 
-    # Handle potential duplicates in renamed columns
+    
     renamed_columns = handle_duplicate_columns(renamed_columns)
 
     df.columns = renamed_columns
